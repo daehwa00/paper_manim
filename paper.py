@@ -57,17 +57,30 @@ class ImageScene(ThreeDScene):
             phi=60 * DEGREES,  # 위에서 내려다보는 각도
             run_time=3,  # 카메라 이동에 걸리는 시간 (초)
         )
-
+        
         # 첫 번째 패치의 x, y 위치 가져오기
-        base_x, base_y, _ = pixel_grid_patches[0].get_center()
+        base_x, base_y, base_z = pixel_grid_patches[0].get_center()
+        z_increment = 0.3
 
-        # 패치들을 차례대로 나타나게 하고, z축으로 쌓아 올림
-        z_increment = 0.3  # z축 높이 증가량
+        # 가운데 패치 가져오기
+        center_patch = pixel_grid_patches[len(pixel_grid_patches) // 2]
+
+        animations = []
+        # 첫 번째 패치를 제외한 모든 패치에 대해 이동 애니메이션 적용
         for i, patch in enumerate(pixel_grid_patches):
-            # 모든 패치를 첫 번째 패치의 x, y 위치로 설정
-            x, y, _ = patch.get_center()
-            patch.move_to(np.array([base_x, base_y, i * z_increment]))
-            self.add(patch)
-            self.wait(0.2)
+            # 각 패치를 첫 번째 패치의 x, y 위치로, z 위치는 순차적으로 증가시키기
+            target_position = np.array([base_x, base_y, base_z + i * 0.5])
+            patch.generate_target()  # 이동할 목표 생성
+            patch.target.move_to(target_position)
+
+            # 첫 번째 패치를 제외하고 이동 애니메이션을 animations 리스트에 추가
+            if i != 0:
+                animations.append(MoveToTarget(patch))
+                
+
+        # 모든 애니메이션을 동시에 실행
+        self.play(AnimationGroup(*animations, lag_ratio=0.1), run_time=2)
+        self.wait(1)
+
 
         self.wait(3)  # 애니메이션이 실행되는 시간
