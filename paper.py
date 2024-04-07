@@ -45,64 +45,50 @@ class ImageScene(ThreeDScene):
         patch_groups.scale_to_fit_height(self.image_height)
         return patch_groups
 
+    def create_and_fade_outlines(self, pixel_grid_patches):
+        create_animations = []
+        fade_animations = []
+        for patch in pixel_grid_patches:
+            outline = SurroundingRectangle(patch, color=YELLOW, buff=0)
+            outline.set_stroke(width=3)
+            create_animations.append(Create(outline))
+            fade_animations.append(FadeOut(outline))
+        self.play(AnimationGroup(*create_animations, lag_ratio=0), run_time=2)
+        self.wait(0.5)
+        self.play(AnimationGroup(*fade_animations, lag_ratio=0), run_time=2)
+
+    def move_camera_to_patches(self, pixel_grid_patches):
+        base_x, base_y, base_z = pixel_grid_patches[0].get_center()
+        z_increment = 0.3
+        center_patch = pixel_grid_patches[len(pixel_grid_patches) // 2]
+        target_position = np.array([base_x, base_y, base_z + len(pixel_grid_patches) // 2 * z_increment])
+        self.move_camera(frame_center=[base_x, base_y, target_position[2]], run_time=1)
+
+    def move_patches_along_bezier_path(self, pixel_grid_patches):
+        animations = []
+        for i, patch in enumerate(pixel_grid_patches):
+            base_x, base_y, base_z = patch.get_center()
+            z_increment = 0.3
+            target_position = np.array([base_x, base_y, base_z + i * z_increment])
+            bezier_path = self.create_bezier_path(patch.get_center(), target_position)
+            anim = MoveAlongPath(patch, bezier_path)
+            animations.append(anim)
+        self.play(AnimationGroup(*animations, lag_ratio=0.1), run_time=2)
+
+    def create_bezier_path(self, start_position, end_position):
+        start_handle = start_position + np.array([2, 2, 0])
+        end_handle = end_position + np.array([-2, 2, 0])
+        bezier_path = CubicBezier(start_position, start_handle, end_handle, end_position)
+        return bezier_path
+
     def construct(self):
         pixel_values = self.get_pixel_value_array()
         pixel_grid_patches = self.create_pixel_grid_patch(pixel_values)
         for patch in pixel_grid_patches:
             self.add(patch)
-        self.wait(3)  # 애니메이션이 실행되는 시간
-
-        create_animations = []
-        fade_animations = []
-        for patch in pixel_grid_patches:
-            # 패치의 외곽선 생성
-            outline = SurroundingRectangle(patch, color=YELLOW, buff=0)
-            outline.set_stroke(width=3)  # 외곽선의 너비 설정
-
-            # Create와 FadeOut 애니메이션을 animations 리스트에 추가
-            create_animations.append(Create(outline))
-            fade_animations.append(FadeOut(outline))
-
-        # 모든 애니메이션을 한번에 실행
-        self.play(AnimationGroup(*create_animations, lag_ratio=0), run_time=2)
-        self.wait(0.5)  # Optional wait time between creation and fading out
-        self.play(AnimationGroup(*fade_animations, lag_ratio=0), run_time=2)
-
-
-        # 카메라 방향을 점진적으로 변경
-        self.move_camera(
-            phi=60 * DEGREES,  # 위에서 내려다보는 각도
-            run_time=3,  # 카메라 이동에 걸리는 시간 (초)
-        )
+        self.wait(3)
         
-        # 첫 번째 패치의 x, y 위치 가져오기
-        base_x, base_y, base_z = pixel_grid_patches[0].get_center()
-        z_increment = 0.3
-
-        # 가운데 패치 가져오기
-        center_patch = pixel_grid_patches[len(pixel_grid_patches) // 2]
-
-        animations = []
-        # 첫 번째 패치를 제외한 모든 패치에 대해 이동 애니메이션 적용
-        for i, patch in enumerate(pixel_grid_patches):
-            # 각 패치를 첫 번째 패치의 x, y 위치로, z 위치는 순차적으로 증가시키기
-            target_position = np.array([base_x, base_y, base_z + i * z_increment])
-            # Define the control points for the CubicBezier curve
-            start_anchor = patch.get_center()
-            start_handle = start_anchor + np.array([2, 2, 0])  # First control point
-            end_handle = target_position + np.array([-2, 2, 0])  # Second control point
-            end_anchor = target_position  # End point of the Bezier curve
-
-            # Create the CubicBezier curve
-            bezier_path = CubicBezier(start_anchor, start_handle, end_handle, end_anchor)
-
-            # Create an animation where the patch moves along the Bezier path
-            anim = MoveAlongPath(patch, bezier_path)
-            animations.append(anim)
-                    
-            if i == len(pixel_grid_patches) // 2:
-                self.move_camera(frame_center=[base_x, base_y, target_position[2]], run_time=1)
-
-        # 모든 애니메이션을 동시에 실행
-        self.play(AnimationGroup(*animations, lag_ratio=0.1), run_time=2)
+        self.create_and_fade_outlines(pixel_grid_patches)
+        self.move_camera_to_patches(pixel_grid_patches)
+        self.move_patches_along_bezier_path(pixel_grid_patches)
         self.wait(1)
