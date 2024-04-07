@@ -10,7 +10,6 @@ class ImageScene(ThreeDScene):
         self.image_height = 3  # 매닉에서의 이미지 높이 설정
         self.pixel_stroke_width = 1  # 픽셀 테두리의 너비
         self.pixel_stroke_opacity = 0.0  # 픽셀 테두리의 불투명도
-        self.grayscale = False  # 회색조 변환 여부
 
     def get_pixel_value_array(self):
         # 이미지 파일을 열고, RGB 값만 포함하는 numpy 배열로 변환
@@ -52,6 +51,24 @@ class ImageScene(ThreeDScene):
         for patch in pixel_grid_patches:
             self.add(patch)
         self.wait(3)  # 애니메이션이 실행되는 시간
+
+        create_animations = []
+        fade_animations = []
+        for patch in pixel_grid_patches:
+            # 패치의 외곽선 생성
+            outline = SurroundingRectangle(patch, color=YELLOW, buff=0)
+            outline.set_stroke(width=3)  # 외곽선의 너비 설정
+
+            # Create와 FadeOut 애니메이션을 animations 리스트에 추가
+            create_animations.append(Create(outline))
+            fade_animations.append(FadeOut(outline))
+
+        # 모든 애니메이션을 한번에 실행
+        self.play(AnimationGroup(*create_animations, lag_ratio=0), run_time=2)
+        self.wait(0.5)  # Optional wait time between creation and fading out
+        self.play(AnimationGroup(*fade_animations, lag_ratio=0), run_time=2)
+
+
         # 카메라 방향을 점진적으로 변경
         self.move_camera(
             phi=60 * DEGREES,  # 위에서 내려다보는 각도
@@ -69,18 +86,23 @@ class ImageScene(ThreeDScene):
         # 첫 번째 패치를 제외한 모든 패치에 대해 이동 애니메이션 적용
         for i, patch in enumerate(pixel_grid_patches):
             # 각 패치를 첫 번째 패치의 x, y 위치로, z 위치는 순차적으로 증가시키기
-            target_position = np.array([base_x, base_y, base_z + i * 0.5])
-            patch.generate_target()  # 이동할 목표 생성
-            patch.target.move_to(target_position)
+            target_position = np.array([base_x, base_y, base_z + i * z_increment])
+            # Define the control points for the CubicBezier curve
+            start_anchor = patch.get_center()
+            start_handle = start_anchor + np.array([2, 2, 0])  # First control point
+            end_handle = target_position + np.array([-2, 2, 0])  # Second control point
+            end_anchor = target_position  # End point of the Bezier curve
 
-            # 첫 번째 패치를 제외하고 이동 애니메이션을 animations 리스트에 추가
-            if i != 0:
-                animations.append(MoveToTarget(patch))
-                
+            # Create the CubicBezier curve
+            bezier_path = CubicBezier(start_anchor, start_handle, end_handle, end_anchor)
+
+            # Create an animation where the patch moves along the Bezier path
+            anim = MoveAlongPath(patch, bezier_path)
+            animations.append(anim)
+                    
+            if i == len(pixel_grid_patches) // 2:
+                self.move_camera(frame_center=[base_x, base_y, target_position[2]], run_time=1)
 
         # 모든 애니메이션을 동시에 실행
         self.play(AnimationGroup(*animations, lag_ratio=0.1), run_time=2)
         self.wait(1)
-
-
-        self.wait(3)  # 애니메이션이 실행되는 시간
