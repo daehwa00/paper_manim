@@ -1,7 +1,3 @@
-from manim import *
-import numpy as np
-
-
 class MagneticMapScene(Scene):
     def construct(self):
         magnetic_map_image = ImageMobject("magnetic_map.png")
@@ -24,6 +20,19 @@ class MagneticMapScene(Scene):
 
         dashed_path = DashedVMobject(full_path.copy(), num_dashes=100, color=WHITE)
         self.add(dashed_path)
+
+        # 실선 original path를 추가합니다.
+        original_path = full_path.copy().set_color(WHITE)
+        self.add(original_path)
+
+        # Original Path 텍스트를 추가합니다.
+        original_path_text = Text("Original Path", font_size=24).set_color(WHITE)
+        original_path_text.next_to(dashed_path, RIGHT, buff=0.5)
+        self.add(original_path_text)
+
+        # path 시작점 근처에 작은 원을 추가하여 강조합니다.
+        start_circle = Circle(radius=0.1, color=WHITE).move_to(start_point)
+        self.add(start_circle)
 
         path_tracker = ValueTracker(0)
 
