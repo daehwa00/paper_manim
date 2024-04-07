@@ -80,8 +80,7 @@ class ImageScene(ThreeDScene):
         z_increment = 0.3
 
         # 가운데 패치 가져오기
-        center_patch = pixel_grid_patches[len(pixel_grid_patches) // 2]
-
+        num_patches = len(pixel_grid_patches)
         animations = []
         # 첫 번째 패치를 제외한 모든 패치에 대해 이동 애니메이션 적용
         for i, patch in enumerate(pixel_grid_patches):
@@ -100,9 +99,94 @@ class ImageScene(ThreeDScene):
             anim = MoveAlongPath(patch, bezier_path)
             animations.append(anim)
                     
-            if i == len(pixel_grid_patches) // 2:
+            if i == num_patches // 2:
                 self.move_camera(frame_center=[base_x, base_y, target_position[2]], run_time=1)
 
         # 모든 애니메이션을 동시에 실행
         self.play(AnimationGroup(*animations, lag_ratio=0.1), run_time=2)
         self.wait(1)
+
+
+        arrow_animations = []
+        fade_arrows= []
+        for i, patch in enumerate(pixel_grid_patches):
+            start_pos = patch.get_center()
+            end_pos = start_pos + np.array([2, 0, 0])
+            arrow = Arrow(start=patch.get_center(), end=end_pos, color=RED)
+            arrow_animations.append(GrowArrow(arrow))
+            fade_arrows.append(FadeOut(arrow))
+
+            if i == num_patches // 2:
+                self.move_camera(frame_center=end_pos, run_time=1)
+                center_arrow = arrow
+
+            
+        
+        self.play(AnimationGroup(*arrow_animations, lag_ratio=0.1), run_time=1)
+
+        model = Rectangle(height=3, width=2, color=BLUE).next_to(center_arrow, RIGHT, buff=1)
+        model.rotate(PI / 2, axis=RIGHT)  # y축을 기준으로 90도 회전
+        model_text = Text("Model", color=WHITE).scale(0.5).move_to(model.get_center())
+        model_text.rotate(PI / 2, axis=RIGHT)  # Text도 같은 방향으로 회전
+
+        self.play(Create(model), Write(model_text))
+
+        # 패치들이 모델로 이동하는 애니메이션
+        for patch, fade_arrow in zip(pixel_grid_patches, fade_arrows):  # 패치와 화살표 애니메이션을 함께 처리
+            self.play(
+                patch.animate.next_to(model, LEFT, buff=0.1),  # 패치 이동
+                fade_arrow,  # 화살표 사라짐
+                run_time=0.1
+            )
+            self.remove(patch)  # 패치 이동 후 제거
+
+        self.wait(1)
+        
+        hidden_dim = 10
+        # 변환된 출력 패치 생성
+        output_patches = VGroup()
+        for i in range(num_patches):
+            # 각 패치는 1 * hidden_dim 차원을 갖습니다
+            patch = Rectangle(height=0.2, width=hidden_dim * 0.2, color=GREEN).set_fill(GREEN, opacity=0.5)
+            output_patches.add(patch)
+
+            if i == num_patches // 2:
+                center_patch = patch
+
+        # 출력 패치를 세로로 배열하고 모델의 오른쪽에 위치시킵니다.
+        output_patches.arrange(DOWN, buff=0.1).next_to(model, RIGHT * 3, buff=0.5)
+
+        # BraceLabel 생성
+        brace_top = BraceLabel(
+            obj=output_patches,  # 대상 객체
+            text=r"Hidden Dim",  # 텍스트 라벨
+            brace_direction=UP,  # 괄호 방향
+            label_constructor=Text,  # 라벨 생성자
+            font_size=24,  # 폰트 크기
+            buff=0.2  # 괄호와 대상 객체 사이의 거리
+        )
+
+        brace_right = BraceLabel(
+            obj=output_patches,  # 대상 객체
+            text=r"Number of Patches",  # 텍스트 라벨
+            brace_direction=RIGHT,  # 괄호 방향 (오른쪽)
+            label_constructor=Text,  # 여기서는 Text를 사용하면 됩니다, MathTex는 수학적 표현에 더 적합
+            font_size=24,  # 폰트 크기
+            buff=0.2  # 괄호와 대상 객체 사이의 거리
+        )
+
+
+        # output_patches와 brace를 모두 포함하는 그룹을 생성합니다.
+        output_group = VGroup(output_patches, brace_top, brace_right)
+
+        # 이제 output_group을 회전시킵니다.
+        output_group.rotate(PI / 2, axis=RIGHT)  # y축을 기준으로 90도 회전
+
+        self.move_camera(frame_center=center_patch.get_center(), phi=90 * DEGREES, run_time=3)
+        # 출력 애니메이션을 output_group에 적용
+        self.play(TransformFromCopy(model, output_patches))
+
+        # 출력 패치와 brace를 화면에 추가
+        self.play(Create(brace_top), Create(brace_right))
+
+        self.wait(2)
