@@ -1,3 +1,7 @@
+from manim import *
+import numpy as np
+
+
 class MagneticMapScene(Scene):
     def construct(self):
         magnetic_map_image = ImageMobject("magnetic_map.png")
@@ -21,18 +25,15 @@ class MagneticMapScene(Scene):
         dashed_path = DashedVMobject(full_path.copy(), num_dashes=100, color=WHITE)
         self.add(dashed_path)
 
-        # 실선 original path를 추가합니다.
-        original_path = full_path.copy().set_color(WHITE)
-        self.add(original_path)
+        original_path_legend_line = Line(ORIGIN, RIGHT * 0.5, color=WHITE)
+        original_path_legend_text = Text("Original Path", font_size=24).next_to(
+            original_path_legend_line, RIGHT, buff=0.1
+        )
 
-        # Original Path 텍스트를 추가합니다.
-        original_path_text = Text("Original Path", font_size=24).set_color(WHITE)
-        original_path_text.next_to(dashed_path, RIGHT, buff=0.5)
-        self.add(original_path_text)
+        legend_group = VGroup(original_path_legend_line, original_path_legend_text)
+        legend_group.next_to(magnetic_map_image, RIGHT, buff=1)
 
-        # path 시작점 근처에 작은 원을 추가하여 강조합니다.
-        start_circle = Circle(radius=0.1, color=WHITE).move_to(start_point)
-        self.add(start_circle)
+        self.add(legend_group)
 
         path_tracker = ValueTracker(0)
 
@@ -64,3 +65,52 @@ class MagneticMapScene(Scene):
         airplane.remove_updater(update_airplane)
         dashed_path.remove_updater(lambda m: m)
         self.wait()
+
+
+class ThreeDSurfacePlot(ThreeDScene):
+    def construct(self):
+        resolution_fa = 24
+        self.set_camera_orientation(phi=75 * DEGREES, theta=-45 * DEGREES)
+
+        gaussians = [
+            (np.array([0, 0]), np.array([[1, 0], [0, 1]])),
+            (np.array([2, 2]), np.array([[0.5, 0.3], [0.3, 0.5]])),
+            (np.array([-2, -1]), np.array([[0.5, 0], [0, 0.5]])),
+            (np.array([1, -3]), np.array([[0.3, -0.1], [-0.1, 0.3]])),
+            (np.array([-3, 2]), np.array([[0.4, 0.3], [0.3, 0.4]])),
+            # 추가된 가우시안 분포들
+            (np.array([3, -2]), np.array([[0.2, 0], [0, 0.2]])),
+            (np.array([-2, 3]), np.array([[0.3, 0.2], [0.2, 0.3]])),
+            (np.array([0, 3]), np.array([[0.4, -0.1], [-0.1, 0.4]])),
+            (np.array([-3, -3]), np.array([[0.5, 0.1], [0.1, 0.5]])),
+            (np.array([3, 3]), np.array([[0.3, 0], [0, 0.3]])),
+            (np.array([-1, 4]), np.array([[0.4, 0.2], [0.2, 0.4]])),
+            (np.array([4, -1]), np.array([[0.6, -0.2], [-0.2, 0.6]])),
+            (np.array([-4, -4]), np.array([[0.3, 0.1], [0.1, 0.3]])),
+            (np.array([4, 4]), np.array([[0.5, -0.1], [-0.1, 0.5]])),
+        ]
+
+        axes = ThreeDAxes()
+        self.add(axes)
+
+        for mean, cov in gaussians:
+            gauss_plane = (
+                Surface(
+                    lambda u, v: self.param_gauss(u, v, mean, cov),
+                    resolution=(resolution_fa, resolution_fa),
+                    v_range=[-2, +2],
+                    u_range=[-2, +2],
+                )
+                .scale(2, about_point=ORIGIN)
+                .set_style(fill_opacity=1, stroke_color=GREEN)
+                .set_fill_by_checkerboard(ORANGE, BLUE, opacity=0.5)
+            )
+            self.add(gauss_plane)
+
+    def param_gauss(self, u, v, mean, cov):
+        x, y = u, v
+        pos = np.array([x, y])
+        diff = pos - mean
+        inv_cov = np.linalg.inv(cov)
+        z = np.exp(-0.5 * (diff.T @ inv_cov @ diff))
+        return np.array([x, y, z])
