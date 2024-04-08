@@ -16,7 +16,7 @@ class ImageScene(ThreeDScene):
         image = Image.open(self.image_path)
         return np.array(image)[:, :, :3]
 
-    def create_pixel_grid_patch(self, array, opacity=0.0, patch_size=4):
+    def create_pixel_grid_patch(self, array, opacity=0.0, patch_size=4, stroke_width=1):
         height, width, _ = array.shape
         patch_groups = VGroup()
 
@@ -38,7 +38,7 @@ class ImageScene(ThreeDScene):
                             ((j - p_j) - patch_size / 2) * RIGHT
                             + ((i - p_i) - patch_size / 2) * DOWN
                         )
-                        pixel.set_stroke(width=self.pixel_stroke_width, opacity=opacity)
+                        pixel.set_stroke(width=stroke_width, opacity=opacity)
                         pixel_grid.add(pixel)
                 pixel_grid.move_to(
                     ((p_j + patch_size / 2) - width / 2) * RIGHT
@@ -60,7 +60,7 @@ class ImageScene(ThreeDScene):
         prev_action_values[7, 8] = [0, 255, 0]
         prev_action_values[10, 12] = [0, 0, 255]
         prev_action_map = self.create_pixel_grid_patch(
-            prev_action_values, opacity=1, patch_size=1
+            prev_action_values, opacity=1, patch_size=1, stroke_width=0.3
         )
 
         prev_action_text = Text("Previous Action", font_size=24).next_to(
@@ -248,15 +248,98 @@ class ImageScene(ThreeDScene):
             anim = MoveAlongPath(patch, bezier_path)
             pixel_animations.append(anim)
 
-            if i == num_patches // 2:
+            if i == (16 * 16) // 2:
                 middle_pixel = patch
 
         self.play(AnimationGroup(*pixel_animations, lag_ratio=0.01), run_time=3)
 
-        self.move_camera(
-            frame_center=middle_pixel.get_center() + RIGHT * 20,
-            run_time=1,
-            focal_distance=10000,
-        )
+        self.move_camera(zoom=0.2, frame_center=middle_pixel.get_center(), run_time=1)
+
+        # 패치를 아래로 이동시키면서 세로로 확장하는 애니메이션
+        pixel_expand_animations = []
+        for patch in prev_action_map:
+            target_position = patch.get_center() + DOWN * patch.height
+
+            move_animation = patch.animate.move_to(target_position)
+            scale_animation = patch.animate.scale(np.array([1, 3, 1]))
+
+            # 이동과 스케일링 애니메이션을 동시에 실행
+            pixel_expand_animations.append(
+                AnimationGroup(move_animation, scale_animation, lag_ratio=1)
+            )
+
+        self.play(AnimationGroup(*pixel_expand_animations, lag_ratio=0.01), run_time=2)
 
         self.wait(3)
+
+        center_pos = middle_pixel.get_center()
+        end_pos = center_pos + np.array([0, 0, 8])
+        center_arrow = Arrow(
+            start=center_pos + np.array([0, 0, 2]), end=end_pos, color=RED
+        )
+        self.play(GrowArrow(center_arrow))
+
+        # 픽셀 패치들이 모델로 이동하는 애니메이션 준비
+        # 모든 픽셀 패치 이동 애니메이션을 한 번에 실행하도록 조정
+        all_animations = []
+
+        # 모델 위에 위치시키기 위해, center_arrow 기반으로 모델 위치 조정
+        model = Rectangle(height=6, width=4, color=BLUE).next_to(
+            center_arrow, UP, buff=0.5
+        )
+        model_text = Text("Model", color=WHITE, font_size=36).move_to(
+            model.get_center()
+        )
+
+        # 모델 생성 애니메이션 추가
+        all_animations.append(FadeIn(model))
+        all_animations.append(Write(model_text))
+
+        # 픽셀 패치가 모델로 이동하는 애니메이션 추가
+        for patch in prev_action_map:
+            move_to_model = patch.animate.move_to(model.get_center())
+            fade_out = FadeOut(patch)
+            all_animations.append(
+                AnimationGroup(move_to_model, fade_out, lag_ratio=0.05)
+            )
+
+        # 모든 애니메이션을 한 번에 실행
+        self.play(AnimationGroup(*all_animations, lag_ratio=0.01), run_time=3)
+
+        # 픽셀 패치들이 모델에 들어간 후의 새로운 출력 매트릭스 생성
+        output_patches = VGroup(
+            *[
+                Rectangle(
+                    height=0.1, width=hidden_dim * 0.2, color=GREEN, fill_opacity=0.5
+                )
+                for _ in range(256)
+            ]
+        )
+        output_patches.arrange(DOWN, buff=0.05).next_to(model, UP, buff=1)
+
+        # 새로운 출력 매트릭스 애니메이션
+        self.play(Transform(prev_action_map, output_patches))
+        self.wait()
+
+        # 새로운 center arrow 업데이트 및 위치 조정
+        new_center_arrow = Arrow(
+            start=center_patch.get_center(),
+            end=center_patch.get_center() + UP * 4,
+            color=RED,
+        )
+        self.play(ReplacementTransform(center_arrow, new_center_arrow))
+
+        # 출력 매트릭스 설명 라벨
+        brace_top = BraceLabel(
+            output_patches, "Hidden Dim: 512", UP, label_constructor=Text, font_size=24
+        )
+        brace_right = BraceLabel(
+            output_patches,
+            "Number of Patches: 256",
+            RIGHT,
+            label_constructor=Text,
+            font_size=24,
+        )
+        self.play(Create(brace_top), Create(brace_right))
+
+        self.wait(2)
